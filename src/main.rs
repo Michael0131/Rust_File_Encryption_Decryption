@@ -1,6 +1,6 @@
 use aes_gcm::aead::{Aead, KeyInit, OsRng};
 use aes_gcm::{Aes256Gcm, AeadCore};
-use std::fs::{self, File};
+use std::fs::{File};
 use std::io::{self, Read, Write};
 
 /// Encrypt plaintext and return ciphertext with the nonce.
