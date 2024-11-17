@@ -1,20 +1,44 @@
 use aes_gcm::aead::{Aead, KeyInit, OsRng};
 use aes_gcm::{Aes256Gcm, AeadCore};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, Read, Write};
 
-fn encrypt(plaintext: &[u8], cipher: &Aes256Gcm) -> (Vec<u8>, Vec<u8>) {
-    let nonce = Aes256Gcm::generate_nonce(&mut OsRng).to_vec();
-    let ciphertext = cipher
-        .encrypt(&aes_gcm::Nonce::from_slice(&nonce), plaintext)
-        .expect("Encryption failed!");
-    (nonce, ciphertext)
+struct EncryptionManager {
+    cipher: Aes256Gcm,
+    storage: HashMap<String, (Vec<u8>, Vec<u8>)>, // ID -> (Nonce, Ciphertext)
 }
 
-fn decrypt(ciphertext: &[u8], nonce: &[u8], cipher: &Aes256Gcm) -> Vec<u8> {
-    cipher
-        .decrypt(&aes_gcm::Nonce::from_slice(nonce), ciphertext)
-        .expect("Decryption failed!")
+impl EncryptionManager {
+    fn new(key: &[u8]) -> Self {
+        let cipher = Aes256Gcm::new_from_slice(key).expect("Failed to create cipher.");
+        EncryptionManager {
+            cipher,
+            storage: HashMap::new(),
+        }
+    }
+
+    fn encrypt(&mut self, plaintext: &[u8]) -> String {
+        let nonce = Aes256Gcm::generate_nonce(&mut OsRng).to_vec();
+        let ciphertext = self
+            .cipher
+            .encrypt(&aes_gcm::Nonce::from_slice(&nonce), plaintext)
+            .expect("Encryption failed!");
+
+        let id = format!("enc-{}", self.storage.len() + 1);
+        self.storage.insert(id.clone(), (nonce, ciphertext));
+        id
+    }
+
+    fn decrypt(&self, id: &str) -> Option<Vec<u8>> {
+        if let Some((nonce, ciphertext)) = self.storage.get(id) {
+            self.cipher
+                .decrypt(&aes_gcm::Nonce::from_slice(nonce), ciphertext)
+                .ok()
+        } else {
+            None
+        }
+    }
 }
 
 fn read_file(file_path: &str) -> Vec<u8> {
@@ -31,7 +55,7 @@ fn write_file(file_path: &str, data: &[u8]) {
 
 fn main() {
     let key = Aes256Gcm::generate_key(&mut OsRng);
-    let cipher = Aes256Gcm::new(&key);
+    let mut manager = EncryptionManager::new(&key);
 
     println!("Welcome to File Encryption/Decryption Program!");
     println!("Encryption Key (hex): {:x?}", key);
@@ -39,8 +63,9 @@ fn main() {
     loop {
         println!("\nChoose an option:");
         println!("1. Encrypt");
-        println!("2. Decrypt a file");
-        println!("3. Exit");
+        println!("2. Decrypt");
+        println!("3. View Stored IDs");
+        println!("4. Exit");
 
         let mut choice = String::new();
         io::stdin()
@@ -70,17 +95,12 @@ fn main() {
                             .expect("Failed to read input.");
                         let user_input = user_input.trim();
 
-                        let (nonce, ciphertext) = encrypt(user_input.as_bytes(), &cipher);
-
+                        let (nonce, ciphertext) = manager.encrypt(user_input.as_bytes());
                         let mut combined = nonce.clone();
                         combined.extend(ciphertext);
-                        let output_path = "UserEncryption.txt";
-                        write_file(output_path, &combined);
 
-                        println!(
-                            "Your input has been encrypted and saved to '{}'.",
-                            output_path
-                        );
+                        write_file("UserEncryption.txt", &combined);
+                        println!("User input encrypted and saved to 'UserEncryption.txt'.");
                     }
                     "2" => {
                         // Encrypt file and save to Encrypt.txt
@@ -92,23 +112,17 @@ fn main() {
                         let file_path = file_path.trim();
 
                         let plaintext = read_file(file_path);
-                        let (nonce, ciphertext) = encrypt(&plaintext, &cipher);
-
-                        let mut combined = nonce.clone();
-                        combined.extend(ciphertext);
-                        let output_path = "Encrypt.txt";
-                        write_file(output_path, &combined);
-
-                        println!("File has been encrypted and saved to '{}'.", output_path);
+                        let id = manager.encrypt(&plaintext);
+                        println!("File encrypted and stored with ID: '{}'.", id);
                     }
                     _ => println!("Invalid option. Returning to the main menu."),
                 }
             }
             "2" => {
-                // Decrypt a file
-                println!("Choose a decryption file:");
+                println!("Choose a decryption option:");
                 println!("1. Decrypt UserEncryption.txt");
                 println!("2. Decrypt Encrypt.txt");
+                println!("3. Decrypt using an ID");
 
                 let mut decrypt_choice = String::new();
                 io::stdin()
@@ -116,35 +130,69 @@ fn main() {
                     .expect("Failed to read input.");
                 let decrypt_choice = decrypt_choice.trim();
 
-                let file_path = match decrypt_choice {
-                    "1" => "UserEncryption.txt",
-                    "2" => "Encrypt.txt",
-                    _ => {
-                        println!("Invalid option. Returning to the main menu.");
-                        continue;
+                match decrypt_choice {
+                    "1" => {
+                        // Decrypt UserEncryption.txt
+                        let encrypted_data = read_file("UserEncryption.txt");
+                        let (nonce, ciphertext) = encrypted_data.split_at(12);
+                        if let Ok(decrypted) = manager
+                            .cipher
+                            .decrypt(&aes_gcm::Nonce::from_slice(nonce), ciphertext)
+                        {
+                            write_file("Decrypt.txt", &decrypted);
+                            println!(
+                                "Decrypted UserEncryption.txt saved to 'Decrypt.txt'."
+                            );
+                        } else {
+                            println!("Decryption failed for UserEncryption.txt.");
+                        }
                     }
-                };
+                    "2" => {
+                        // Decrypt Encrypt.txt
+                        let encrypted_data = read_file("Encrypt.txt");
+                        let (nonce, ciphertext) = encrypted_data.split_at(12);
+                        if let Ok(decrypted) = manager
+                            .cipher
+                            .decrypt(&aes_gcm::Nonce::from_slice(nonce), ciphertext)
+                        {
+                            write_file("Decrypt.txt", &decrypted);
+                            println!("Decrypted Encrypt.txt saved to 'Decrypt.txt'.");
+                        } else {
+                            println!("Decryption failed for Encrypt.txt.");
+                        }
+                    }
+                    "3" => {
+                        // Decrypt using an ID from HashMap
+                        println!("Enter the ID to decrypt:");
+                        let mut id = String::new();
+                        io::stdin()
+                            .read_line(&mut id)
+                            .expect("Failed to read input.");
+                        let id = id.trim();
 
-                let encrypted_data = read_file(file_path);
-
-                let (nonce, ciphertext) = encrypted_data.split_at(12);
-                let decrypted = decrypt(ciphertext, nonce, &cipher);
-
-                let output_path = "Decrypt.txt";
-                write_file(output_path, &decrypted);
-
-                println!(
-                    "The file '{}' has been decrypted and saved to '{}'.",
-                    file_path, output_path
-                );
+                        if let Some(decrypted) = manager.decrypt(id) {
+                            write_file("Decrypt.txt", &decrypted);
+                            println!(
+                                "Decryption successful. Output saved to 'Decrypt.txt'."
+                            );
+                        } else {
+                            println!("Invalid ID. Decryption failed.");
+                        }
+                    }
+                    _ => println!("Invalid option. Returning to the main menu."),
+                }
             }
             "3" => {
+                println!("Stored IDs:");
+                for id in manager.storage.keys() {
+                    println!("- {}", id);
+                }
+            }
+            "4" => {
                 println!("Exiting program. Goodbye!");
                 break;
             }
-            _ => {
-                println!("Invalid choice. Please try again.");
-            }
+            _ => println!("Invalid choice. Please try again."),
         }
     }
 }
