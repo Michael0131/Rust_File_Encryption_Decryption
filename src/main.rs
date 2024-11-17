@@ -1,6 +1,6 @@
 use aes_gcm::aead::{Aead, KeyInit, OsRng};
 use aes_gcm::{Aes256Gcm, AeadCore};
-use std::fs::{File};
+use std::fs::File;
 use std::io::{self, Read, Write};
 
 fn encrypt(plaintext: &[u8], cipher: &Aes256Gcm) -> (Vec<u8>, Vec<u8>) {
@@ -62,6 +62,7 @@ fn main() {
 
                 match encrypt_choice {
                     "1" => {
+                        // Encrypt user input and save to UserEncryption.txt
                         println!("Enter text to encrypt:");
                         let mut user_input = String::new();
                         io::stdin()
@@ -70,13 +71,19 @@ fn main() {
                         let user_input = user_input.trim();
 
                         let (nonce, ciphertext) = encrypt(user_input.as_bytes(), &cipher);
-                        println!("Encrypted data (hex): {:x?}", ciphertext);
-                        println!("Nonce (hex): {:x?}", nonce);
 
-                        let decrypted = decrypt(&ciphertext, &nonce, &cipher);
-                        println!("Decrypted text: {}", String::from_utf8(decrypted).unwrap());
+                        let mut combined = nonce.clone();
+                        combined.extend(ciphertext);
+                        let output_path = "UserEncryption.txt";
+                        write_file(output_path, &combined);
+
+                        println!(
+                            "Your input has been encrypted and saved to '{}'.",
+                            output_path
+                        );
                     }
                     "2" => {
+                        // Encrypt file and save to Encrypt.txt
                         println!("Enter the file path to encrypt:");
                         let mut file_path = String::new();
                         io::stdin()
@@ -84,39 +91,52 @@ fn main() {
                             .expect("Failed to read input.");
                         let file_path = file_path.trim();
 
-                        // Fixed output path
-                        let output_path = "Encrypt.txt";
-
                         let plaintext = read_file(file_path);
                         let (nonce, ciphertext) = encrypt(&plaintext, &cipher);
 
                         let mut combined = nonce.clone();
                         combined.extend(ciphertext);
+                        let output_path = "Encrypt.txt";
                         write_file(output_path, &combined);
 
-                        println!("Encrypted data saved to '{}'", output_path);
+                        println!("File has been encrypted and saved to '{}'.", output_path);
                     }
                     _ => println!("Invalid option. Returning to the main menu."),
                 }
             }
             "2" => {
-                println!("Enter the encrypted file path:");
-                let mut file_path = String::new();
-                io::stdin()
-                    .read_line(&mut file_path)
-                    .expect("Failed to read input.");
-                let file_path = file_path.trim();
+                // Decrypt a file
+                println!("Choose a decryption file:");
+                println!("1. Decrypt UserEncryption.txt");
+                println!("2. Decrypt Encrypt.txt");
 
-                // Fixed output path
-                let output_path = "Decrypt.txt";
+                let mut decrypt_choice = String::new();
+                io::stdin()
+                    .read_line(&mut decrypt_choice)
+                    .expect("Failed to read input.");
+                let decrypt_choice = decrypt_choice.trim();
+
+                let file_path = match decrypt_choice {
+                    "1" => "UserEncryption.txt",
+                    "2" => "Encrypt.txt",
+                    _ => {
+                        println!("Invalid option. Returning to the main menu.");
+                        continue;
+                    }
+                };
 
                 let encrypted_data = read_file(file_path);
 
                 let (nonce, ciphertext) = encrypted_data.split_at(12);
                 let decrypted = decrypt(ciphertext, nonce, &cipher);
+
+                let output_path = "Decrypt.txt";
                 write_file(output_path, &decrypted);
 
-                println!("Decrypted content saved to '{}'", output_path);
+                println!(
+                    "The file '{}' has been decrypted and saved to '{}'.",
+                    file_path, output_path
+                );
             }
             "3" => {
                 println!("Exiting program. Goodbye!");
