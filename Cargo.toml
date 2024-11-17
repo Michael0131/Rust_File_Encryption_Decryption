@@ -1,0 +1,8 @@
+[package]
+name = "Rust_File_Encryption_Decryption"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+aes-gcm = "0.10"
+rand = "0.8"
