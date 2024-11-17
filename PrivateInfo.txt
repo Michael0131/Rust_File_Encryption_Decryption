@@ -1,0 +1,9 @@
+Name: John Doe
+Email: john.doe@example.com
+Phone: (555) 123-4567
+Address: 12345 Elm Street, Springfield, USA
+Social Security Number: 123-45-6789
+Bank Account Number: 987654321
+Bank Routing Number: 123456789
+
+This is confidential information. Please handle with care!
