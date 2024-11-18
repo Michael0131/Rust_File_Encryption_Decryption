@@ -7,6 +7,7 @@ use std::process::Command;
 use std::thread;
 use std::time::Duration;
 
+// Utility function to clear the terminal screen
 fn clear_screen() {
     if cfg!(target_os = "windows") {
         Command::new("cmd")
@@ -20,9 +21,18 @@ fn clear_screen() {
     }
 }
 
+// Pauses for a moment, clears the screen, displays a message, and clears again
+fn pause_and_clear(message: &str) {
+    clear_screen();
+    println!("{}", message);
+    thread::sleep(Duration::from_secs(3));
+    clear_screen();
+}
+
+// Struct to manage encryption and decryption
 struct EncryptionManager {
     cipher: Aes256Gcm,
-    storage: HashMap<String, (Vec<u8>, Vec<u8>)>, // ID -> (Nonce, Ciphertext)
+    storage: HashMap<String, (Vec<u8>, Vec<u8>)>, // Map ID -> (Nonce, Ciphertext)
 }
 
 impl EncryptionManager {
@@ -57,6 +67,7 @@ impl EncryptionManager {
     }
 }
 
+// Utility to read content from a file
 fn read_file(file_path: &str) -> Vec<u8> {
     let mut file = File::open(file_path).expect("Failed to open the file.");
     let mut content = Vec::new();
@@ -64,30 +75,24 @@ fn read_file(file_path: &str) -> Vec<u8> {
     content
 }
 
+// Utility to write content to a file
 fn write_file(file_path: &str, data: &[u8]) {
     let mut file = File::create(file_path).expect("Failed to create the file.");
     file.write_all(data).expect("Failed to write to the file.");
 }
 
-fn pause_and_clear(msg: &str) {
-    clear_screen();
-    println!("{}", msg);
-    thread::sleep(Duration::from_secs(3));
-    clear_screen();
-}
-
 fn main() {
-    let key = Aes256Gcm::generate_key(&mut OsRng);
-    let mut manager = EncryptionManager::new(&key);
+    let key = Aes256Gcm::generate_key(&mut OsRng); // Generate encryption key
+    let mut manager = EncryptionManager::new(&key); // Initialize manager with the key
 
     println!("Welcome to File Encryption/Decryption Program!");
     println!("Encryption Key (hex): {:x?}", key);
 
     loop {
-        clear_screen();
-        println!("Choose an option:");
+        // Display main menu
+        println!("\nChoose an option:");
         println!("1. Encrypt");
-        println!("2. Decrypt");
+        println!("2. Decrypt a file");
         println!("3. View Stored IDs");
         println!("4. Exit");
 
@@ -112,6 +117,8 @@ fn main() {
 
                 match encrypt_choice {
                     "1" => {
+                        clear_screen();
+                        // Encrypt user input and save to UserEncryption.txt
                         println!("Enter text to encrypt:");
                         let mut user_input = String::new();
                         io::stdin()
@@ -119,13 +126,16 @@ fn main() {
                             .expect("Failed to read input.");
                         let user_input = user_input.trim();
 
-                        let id = manager.encrypt(user_input.as_bytes());
+                        let id = manager.encrypt(user_input.as_bytes()); // Encrypt input
+                        write_file("UserEncryption.txt", user_input.as_bytes()); // Save input to file
                         pause_and_clear(&format!(
-                            "Text encrypted and stored with ID: '{}'",
+                            "Your input has been encrypted and stored with ID: '{}' in 'UserEncryption.txt'.",
                             id
                         ));
                     }
                     "2" => {
+                        clear_screen();
+                        // Encrypt file and save to Encrypt.txt
                         println!("Enter the file path to encrypt:");
                         let mut file_path = String::new();
                         io::stdin()
@@ -134,15 +144,14 @@ fn main() {
                         let file_path = file_path.trim();
 
                         let plaintext = read_file(file_path);
-                        let id = manager.encrypt(&plaintext);
+                        let id = manager.encrypt(&plaintext); // Encrypt file content
+                        write_file("Encrypt.txt", &plaintext); // Save plaintext to file
                         pause_and_clear(&format!(
-                            "File encrypted and stored with ID: '{}'.",
+                            "File has been encrypted and stored with ID: '{}' in 'Encrypt.txt'.",
                             id
                         ));
                     }
-                    _ => {
-                        pause_and_clear("Invalid option. Returning to the main menu.");
-                    }
+                    _ => pause_and_clear("Invalid option. Returning to the main menu."),
                 }
             }
             "2" => {
@@ -155,18 +164,15 @@ fn main() {
                 let id = id.trim();
 
                 if let Some(decrypted) = manager.decrypt(id) {
-                    let output_path = "Decrypt.txt";
-                    write_file(output_path, &decrypted);
-                    pause_and_clear(&format!(
-                        "Decryption successful. Output saved to '{}'.",
-                        output_path
-                    ));
+                    write_file("Decrypt.txt", &decrypted); // Save decrypted data to Decrypt.txt
+                    pause_and_clear("Decryption successful. Output saved to 'Decrypt.txt'.");
                 } else {
                     pause_and_clear("Invalid ID. Decryption failed.");
                 }
             }
             "3" => {
                 clear_screen();
+                // View stored IDs
                 let mut ids = String::from("Stored IDs:\n");
                 for id in manager.storage.keys() {
                     ids.push_str(&format!("- {}\n", id));
@@ -174,6 +180,7 @@ fn main() {
                 pause_and_clear(&ids);
             }
             "4" => {
+                clear_screen();
                 pause_and_clear("Exiting program. Goodbye!");
                 break;
             }
