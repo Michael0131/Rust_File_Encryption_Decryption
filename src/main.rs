@@ -56,7 +56,7 @@ impl EncryptionManager {
             .cipher
             .encrypt(&aes_gcm::Nonce::from_slice(&nonce), plaintext) // Perform encryption
             .expect("Encryption failed!");
-
+ 
         let id = format!("enc-{}", self.storage.len() + 1); // Generate unique ID for storage
         self.storage.insert(id.clone(), (nonce.clone(), ciphertext.clone())); // Store nonce and ciphertext
 
